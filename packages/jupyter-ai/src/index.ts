@@ -1,5 +1,5 @@
 import { IAutocompletionRegistry } from '@jupyter/chat';
-import { IGlobalAwareness } from '@jupyter/collaboration';
+import { IGlobalAwareness, UsersItem } from '@jupyter/collaboration';
 import {
   JupyterFrontEnd,
   JupyterFrontEndPlugin,
@@ -10,18 +10,20 @@ import {
   ReactWidget,
   IThemeManager,
   MainAreaWidget,
-  ICommandPalette
+  ICommandPalette,
+  IToolbarWidgetRegistry
 } from '@jupyterlab/apputils';
 import { IDocumentWidget } from '@jupyterlab/docregistry';
 import { IRenderMimeRegistry } from '@jupyterlab/rendermime';
 import { Signal } from '@lumino/signaling';
+import { LabChatPanel, IChatFactory} from 'jupyterlab-chat';
 import type { Awareness } from 'y-protocols/awareness';
 
 import { ChatHandler } from './chat_handler';
 import { completionPlugin } from './completions';
 import { ActiveCellManager } from './contexts/active-cell-context';
-import { SelectionWatcher } from './selection-watcher';
 import { menuPlugin } from './plugins/menu-plugin';
+import { SelectionWatcher } from './selection-watcher';
 import { autocompletion } from './slash-autocompletion';
 import { statusItemPlugin } from './status';
 import {
@@ -30,6 +32,7 @@ import {
   IJaiMessageFooter,
   IJaiTelemetryHandler
 } from './tokens';
+import { userIconRenderer } from './user-icon';
 import { buildErrorWidget } from './widgets/chat-error';
 import { buildChatSidebar } from './widgets/chat-sidebar';
 import { buildAiSettings } from './widgets/settings-widget';
@@ -186,7 +189,7 @@ const plugin: JupyterFrontEndPlugin<IJaiCore> = {
 /**
  * Add slash commands to jupyterlab chat.
  */
-const chat_autocompletion: JupyterFrontEndPlugin<void> = {
+const chatAutocompletion: JupyterFrontEndPlugin<void> = {
   id: '@jupyter-ai/core:autocompletion',
   autoStart: true,
   requires: [IAutocompletionRegistry],
@@ -198,12 +201,37 @@ const chat_autocompletion: JupyterFrontEndPlugin<void> = {
   }
 };
 
+/**
+ * Customize users item toolbar widget.
+ */
+const usersItem: JupyterFrontEndPlugin<void> = {
+  id: '@jupyter-ai/core:users_item',
+  autoStart: true,
+  requires: [IChatFactory, IToolbarWidgetRegistry],
+  activate: async (
+    app: JupyterFrontEnd,
+    chatFactory: IChatFactory,
+    toolbarRegistry: IToolbarWidgetRegistry
+  ) => {
+    toolbarRegistry.addFactory<LabChatPanel>(
+      'Chat',
+      'usersItem',
+      panel =>
+        UsersItem.createWidget({
+          model: panel.model,
+          iconRenderer: userIconRenderer
+        })
+    );
+  }
+};
+
 export default [
   plugin,
   statusItemPlugin,
   completionPlugin,
   menuPlugin,
-  chat_autocompletion
+  chatAutocompletion,
+  usersItem
 ];
 
 export * from './contexts';
