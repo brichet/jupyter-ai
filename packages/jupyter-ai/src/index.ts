@@ -14,7 +14,9 @@ import {
 } from '@jupyterlab/apputils';
 import { IDocumentWidget } from '@jupyterlab/docregistry';
 import { IRenderMimeRegistry } from '@jupyterlab/rendermime';
+import { ISettingRegistry } from '@jupyterlab/settingregistry';
 import { Signal } from '@lumino/signaling';
+import { IChatFactory } from 'jupyterlab-chat';
 import type { Awareness } from 'y-protocols/awareness';
 
 import { ChatHandler } from './chat_handler';
@@ -184,6 +186,36 @@ const plugin: JupyterFrontEndPlugin<IJaiCore> = {
 };
 
 /**
+ * Lock the default directory for chat creation / look for.
+ */
+const chatDefaultDirectory: JupyterFrontEndPlugin<void> = {
+  id: '@jupyter-ai/core:chatSettings',
+  autoStart: true,
+  requires: [IChatFactory, ISettingRegistry],
+  activate: (
+    app: JupyterFrontEnd,
+    factory: IChatFactory,
+    settingRegistry: ISettingRegistry
+  ) => {
+    Promise.all([
+      app.restored,
+      settingRegistry.load('jupyterlab-chat-extension:factory')
+    ]).then(([, setting]) => {
+      // Read the settings
+      setting.set('defaultDirectory', 'ai-chats');
+      if (setting.schema.properties) {
+        setting.schema.properties.defaultDirectory = {
+          description: 'Default directory where to create and look for chat.',
+          type: 'string',
+          default: '',
+          readOnly: true
+        };
+      }
+    });
+  }
+};
+
+/**
  * Add slash commands to jupyterlab chat.
  */
 const chat_autocompletion: JupyterFrontEndPlugin<void> = {
@@ -203,7 +235,8 @@ export default [
   statusItemPlugin,
   completionPlugin,
   menuPlugin,
-  chat_autocompletion
+  chat_autocompletion,
+  chatDefaultDirectory
 ];
 
 export * from './contexts';
