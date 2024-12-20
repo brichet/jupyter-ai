@@ -37,6 +37,7 @@ from jupyter_ai.models import (
 )
 from jupyter_ai_magics import Persona
 from jupyter_ai_magics.providers import BaseProvider
+from jupyterlab_chat.models import Message as YChatMessage, NewMessage, User
 from jupyterlab_chat.ychat import YChat
 from langchain.pydantic_v1 import BaseModel
 from langchain_core.messages import AIMessageChunk
@@ -182,13 +183,6 @@ class BaseChatHandler:
         self.context_providers = context_providers
         self.message_interrupted = message_interrupted
         self.ychat = ychat
-        self.indexes_by_id: Dict[str, int] = {}
-        """
-        Indexes of messages in the YChat document by message ID.
-
-        TODO: Remove this once `jupyterlab-chat` can update messages by ID
-        without an index.
-        """
 
         self.llm: Optional[BaseProvider] = None
         self.llm_params: Optional[dict] = None
@@ -296,24 +290,27 @@ class BaseChatHandler:
 
         bot = self.ychat.get_user(BOT["username"])
         if not bot:
-            self.ychat.set_user(BOT)
+            self.ychat.set_user(User(**BOT))
 
-        index = self.indexes_by_id.get(id, None) if id else None
-        id = id if id else str(uuid4())
-        new_index = self.ychat.set_message(
-            {
-                "type": "msg",
-                "body": body,
-                "id": id if id else str(uuid4()),
-                "time": time.time(),
-                "sender": BOT["username"],
-                "raw_time": False,
-            },
-            index=index,
-            append=True,
-        )
+        if id is None:
+            id = self.ychat.add_message(
+                NewMessage(
+                    body=body,
+                    sender=BOT["username"]
+                )
+            )
+        else:
+            self.ychat.update_message(
+                YChatMessage(
+                    body=body,
+                    sender=BOT["username"],
+                    id=id,
+                    time=time.time(),
+                    raw_time=False
+                ),
+                append=True
+            )
 
-        self.indexes_by_id[id] = new_index
         return id
 
     def broadcast_message(self, message: Message):
