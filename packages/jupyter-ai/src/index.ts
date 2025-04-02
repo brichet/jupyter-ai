@@ -18,6 +18,9 @@ import { statusItemPlugin } from './status';
 import { IJaiCompletionProvider } from './tokens';
 import { buildErrorWidget } from './widgets/chat-error';
 import { buildAiSettings } from './widgets/settings-widget';
+import { ChatWidgetFactory, IChatFactory, LabChatPanel } from 'jupyterlab-chat';
+import { IChatModel, IInputToolbarRegistry, IUser } from '@jupyter/chat';
+import { stopItem } from './components/input-toolbar/stop-button';
 
 export type DocumentTracker = IWidgetTracker<IDocumentWidget>;
 
@@ -89,10 +92,78 @@ const plugin: JupyterFrontEndPlugin<void> = {
   }
 };
 
+const stopStreaming: JupyterFrontEndPlugin<void> = {
+  id: '@jupyter-ai/core:stop-streaming',
+  autoStart: true,
+  requires: [IChatFactory],
+  activate: (app: JupyterFrontEnd, factory: IChatFactory) => {
+    // Toggle the stop button visibility.
+    function toggleStopButton(
+      registry: IInputToolbarRegistry,
+      state: boolean
+    ): void {
+      if (state) {
+        registry.hide('send');
+        registry.hide('attach');
+        registry.show('stop');
+      } else {
+        registry.hide('stop');
+        registry.show('send');
+        registry.show('attach');
+      }
+    }
+
+    // Add the stop button to the input toolbar registry when a new chat is created.
+    factory.tracker.widgetAdded.connect((_, widget) => {
+      let registry: IInputToolbarRegistry | undefined;
+
+      if (widget instanceof LabChatPanel) {
+        // Chat in the main area.
+        registry = (widget.context as ChatWidgetFactory.IContext)
+          .inputToolbarRegistry;
+      } else {
+        // Chat in the side panel.
+        registry = widget.inputToolbarRegistry;
+      }
+      if (registry) {
+        let stopButtonVisible = false;
+
+        // Triggered when the current writers changed.
+        const writersChanged = (_: IChatModel, users: IUser[]) => {
+          if (!registry) {
+            return;
+          }
+          // TODO: get the bot name if it is customizable
+          const botResponding =
+            users.filter(user => user.name === 'Jupyternaut').length > 0;
+          if (botResponding && !stopButtonVisible) {
+            stopButtonVisible = true;
+            toggleStopButton(registry, stopButtonVisible);
+          } else if (!botResponding && stopButtonVisible) {
+            stopButtonVisible = false;
+            toggleStopButton(registry, stopButtonVisible);
+          }
+        };
+
+        // Add the stop button to the registry.
+        registry.addItem('stop', stopItem(widget.model));
+
+        // Listen to the writers in the chat.
+        widget.model.writersChanged?.connect(writersChanged);
+
+        widget.disposed.connect(() => {
+          widget.model.writersChanged?.disconnect(writersChanged);
+        });
+      }
+    });
+  }
+};
+
 export default [
   plugin,
   statusItemPlugin,
   completionPlugin,
+  stopStreaming,
   ...chatCommandPlugins
 ];
 
